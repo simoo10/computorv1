@@ -9,6 +9,17 @@ and all coefficient arithmetic is done with exact rationals so that
 fractions printed as answers are really exact, never rounded guesses.
 """
 
+#!/usr/bin/env python3
+"""
+computor v1
+
+Solves polynomial equations of degree <= 2.
+
+No math library is used: sqrt is implemented by hand (Newton's method),
+and all coefficient arithmetic is done with exact rationals so that
+fractions printed as answers are really exact, never rounded guesses.
+"""
+
 import sys
 import re
 
@@ -106,7 +117,7 @@ def isqrt_exact(n):
         return n
     x = n
     y = (x + 1) // 2
-    while y < x:                      # integer Newton, converges downward
+    while y < x:
         x = y
         y = (x + n // x) // 2
     return x if x * x == n else None
@@ -132,7 +143,7 @@ def my_sqrt(x):
     guess = x if x >= 1 else 1.0
     for _ in range(200):
         better = (guess + x / guess) / 2
-        if better == guess:           # fixed point reached in float precision
+        if better == guess:
             break
         guess = better
     return guess
@@ -143,7 +154,6 @@ def my_sqrt(x):
 # ---------------------------------------------------------------------------
 
 def fmt_decimal(value, places=6):
-    """Format a float with up to `places` decimals, trailing zeros removed."""
     s = f"{value:.{places}f}"
     if "." in s:
         s = s.rstrip("0").rstrip(".")
@@ -151,10 +161,6 @@ def fmt_decimal(value, places=6):
 
 
 def fmt_rat(r):
-    """
-    Coefficient display: integers as integers, terminating rationals as
-    decimals (9.3 stays 9.3), anything else as an irreducible fraction.
-    """
     if r.den == 1:
         return str(r.num)
     rest, k = r.den, 0
@@ -166,10 +172,10 @@ def fmt_rat(r):
     while rest % 5 == 0:
         rest //= 5
         k += 1
-    if rest != 1:                             # not a terminating decimal
+    if rest != 1:
         return f"{r.num}/{r.den}"
-    places = twos if twos > k else k          # 10^places is divisible by den
-    scaled = r.num * (10 ** places) // r.den  # exact, no float involved
+    places = twos if twos > k else k
+    scaled = r.num * (10 ** places) // r.den
     sign = "-" if scaled < 0 else ""
     digits = str(abs(scaled)).rjust(places + 1, "0")
     text = f"{sign}{digits[:-places]}.{digits[-places:]}"
@@ -177,27 +183,25 @@ def fmt_rat(r):
 
 
 def fmt_solution(r):
-    """A solution that is exactly rational: irreducible fraction."""
     return str(r.num) if r.den == 1 else f"{r.num}/{r.den}"
 
 
 def fmt_imaginary(r):
-    """Imaginary part, subject style: 2i/5, 3i."""
     if r.den == 1:
         return f"{r.num}i"
     return f"{r.num}i/{r.den}"
 
 
 # ---------------------------------------------------------------------------
-# Parsing  (handles the strict a * X^p form and free form entry)
+# Parsing
 # ---------------------------------------------------------------------------
 
 TERM_RE = re.compile(
     r"""^
-    (?:(?P<coeff>\d+(?:\.\d*)?|\.\d+)         # 5, 9.3, .5
-       (?:\*?(?P<xa>X)(?:\^(?P<pa>\d+))?)?    #      * X, * X^2, X^2
+    (?:(?P<coeff>\d+(?:\.\d*)?|\.\d+)
+       (?:\*?(?P<xa>X)(?:\^(?P<pa>\d+))?)?
      |
-       (?P<xb>X)(?:\^(?P<pb>\d+))?            # X, X^2 (implicit coefficient 1)
+       (?P<xb>X)(?:\^(?P<pb>\d+))?
     )$""",
     re.VERBOSE | re.IGNORECASE,
 )
@@ -208,7 +212,6 @@ class ParseError(Exception):
 
 
 def parse_side(side):
-    """Return {exponent: Rat} for one side of the equation."""
     side = re.sub(r"\s+", "", side)
     if not side:
         raise ParseError("an empty side is not a valid expression")
@@ -216,7 +219,6 @@ def parse_side(side):
     if bad:
         raise ParseError("unexpected character(s): " + " ".join(bad))
 
-    # split into signed chunks: "5+4*X-9.3*X^2" -> ['+5', '+4*X', '-9.3*X^2']
     chunks = re.findall(r"[+-]?[^+-]+", side)
     terms = {}
     for chunk in chunks:
@@ -250,7 +252,6 @@ def parse_equation(text):
 # ---------------------------------------------------------------------------
 
 def reduce_equation(left, right):
-    """Move everything to the left side: returns {exponent: Rat}."""
     reduced = {}
     for exp in set(left) | set(right):
         reduced[exp] = left.get(exp, ZERO) - right.get(exp, ZERO)
@@ -263,9 +264,14 @@ def degree_of(reduced):
 
 
 def print_reduced_form(reduced):
-    """Prints every power the user wrote, zero coefficients included."""
+    # keep zero terms only up to the highest non-null exponent (the subject's
+    # own examples keep a "0 * X^2" wedged between real terms, but nothing
+    # should trail after the last non-null one)
+    top = max((e for e, c in reduced.items() if not c.is_zero()), default=None)
     parts = []
     for exp in sorted(reduced):
+        if top is not None and exp > top:
+            continue
         coeff = reduced[exp]
         if coeff.sign() < 0:
             sign = "- " if parts else "-"
@@ -283,16 +289,17 @@ def print_reduced_form(reduced):
 # Solving
 # ---------------------------------------------------------------------------
 
-def solve_degree_one(a, b, verbose):
-    """a * X + b = 0"""
+def solve_degree_one(a, b, verbose, want_fraction=False):
     if verbose:
         print(f"Steps: X = -b / a = -({fmt_rat(b)}) / ({fmt_rat(a)})")
     print("The solution is:")
-    print(fmt_solution(-b / a))
+    x = -b / a
+    # mandatory part shows a decimal here (subject's own example: -0.25,
+    # not -1/4); the fraction form is the bonus, only with --fraction
+    print(fmt_solution(x) if want_fraction else fmt_decimal(x.to_float()))
 
 
-def solve_degree_two(a, b, c, verbose):
-    """a * X^2 + b * X + c = 0"""
+def solve_degree_two(a, b, c, verbose, want_fraction=False):
     two_a = Rat(2) * a
     delta = (b * b) - (Rat(4) * a * c)
 
@@ -300,18 +307,23 @@ def solve_degree_two(a, b, c, verbose):
         print(f"Steps: delta = b^2 - 4ac = ({fmt_rat(b)})^2 - 4 * "
               f"({fmt_rat(a)}) * ({fmt_rat(c)}) = {fmt_rat(delta)}")
 
+    def show_real(x):
+        # mandatory part prints a decimal for real roots (subject never
+        # shows a real root as a fraction); --fraction is the bonus
+        return fmt_solution(x) if want_fraction else fmt_decimal(x.to_float())
+
     if delta.is_zero():
         print("Discriminant is zero, the solution is:")
-        print(fmt_solution(-b / two_a))
+        print(show_real(-b / two_a))
         return
 
     if delta.sign() > 0:
         print("Discriminant is strictly positive, the two solutions are:")
         root = rat_sqrt_exact(delta)
-        if root is not None:                       # solutions are rational
-            print(fmt_solution((-b + root) / two_a))
-            print(fmt_solution((-b - root) / two_a))
-        else:                                      # irrational: decimals
+        if root is not None:
+            print(show_real((-b + root) / two_a))
+            print(show_real((-b - root) / two_a))
+        else:
             r = my_sqrt(delta.to_float())
             d = two_a.to_float()
             print(fmt_decimal((-b.to_float() + r) / d))
@@ -338,7 +350,7 @@ def solve_degree_two(a, b, c, verbose):
 # Entry point
 # ---------------------------------------------------------------------------
 
-def run(equation, verbose=False):
+def run(equation, verbose=False, want_fraction=False):
     left, right = parse_equation(equation)
     reduced = reduce_equation(left, right)
 
@@ -353,9 +365,9 @@ def run(equation, verbose=False):
     if degree > 2:
         print("The polynomial degree is strictly greater than 2, I can't solve.")
     elif degree == 2:
-        solve_degree_two(a, b, c, verbose)
+        solve_degree_two(a, b, c, verbose, want_fraction)
     elif degree == 1:
-        solve_degree_one(b, c, verbose)
+        solve_degree_one(b, c, verbose, want_fraction)
     else:
         if c.is_zero():
             print("Any real number is a solution.")
@@ -364,8 +376,10 @@ def run(equation, verbose=False):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if a not in ("-v", "--steps")]
-    verbose = len(args) != len(sys.argv[1:])
+    raw = sys.argv[1:]
+    verbose = "-v" in raw or "--steps" in raw
+    want_fraction = "-f" in raw or "--fraction" in raw
+    args = [a for a in raw if a not in ("-v", "--steps", "-f", "--fraction")]
 
     if args:
         equation = args[0]
@@ -377,7 +391,7 @@ def main():
             return 1
 
     try:
-        run(equation, verbose)
+        run(equation, verbose, want_fraction)
     except ParseError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
