@@ -1,35 +1,10 @@
 #!/usr/bin/env python3
-"""
-computor v1
-
-Solves polynomial equations of degree <= 2.
-
-No math library is used: sqrt is implemented by hand (Newton's method),
-and all coefficient arithmetic is done with exact rationals so that
-fractions printed as answers are really exact, never rounded guesses.
-"""
-
-#!/usr/bin/env python3
-"""
-computor v1
-
-Solves polynomial equations of degree <= 2.
-
-No math library is used: sqrt is implemented by hand (Newton's method),
-and all coefficient arithmetic is done with exact rationals so that
-fractions printed as answers are really exact, never rounded guesses.
-"""
 
 import sys
 import re
 
 
-# ---------------------------------------------------------------------------
-# Exact rational arithmetic (no fractions module, no floats)
-# ---------------------------------------------------------------------------
-
 def my_gcd(a, b):
-    """Greatest common divisor, iterative Euclid."""
     a, b = abs(a), abs(b)
     while b:
         a, b = b, a % b
@@ -37,7 +12,6 @@ def my_gcd(a, b):
 
 
 class Rat:
-    """An exact rational number num/den, always kept irreducible, den > 0."""
 
     __slots__ = ("num", "den")
 
@@ -50,7 +24,6 @@ class Rat:
         self.num = num // g
         self.den = den // g
 
-    # --- the four allowed operations -------------------------------------
     def __add__(self, o):
         return Rat(self.num * o.den + o.num * self.den, self.den * o.den)
 
@@ -68,7 +41,6 @@ class Rat:
     def __neg__(self):
         return Rat(-self.num, self.den)
 
-    # --- helpers ----------------------------------------------------------
     def is_zero(self):
         return self.num == 0
 
@@ -89,7 +61,6 @@ ZERO = Rat(0)
 
 
 def rat_from_string(text):
-    """'9.3' -> Rat(93, 10) exactly. '-5' -> Rat(-5, 1). No float involved."""
     negative = text.startswith("-")
     text = text.lstrip("+-")
     if "." in text:
@@ -105,12 +76,8 @@ def rat_from_string(text):
     return -r if negative else r
 
 
-# ---------------------------------------------------------------------------
-# Square root, implemented by hand
-# ---------------------------------------------------------------------------
 
 def isqrt_exact(n):
-    """Integer square root of n >= 0, or None if n is not a perfect square."""
     if n < 0:
         return None
     if n < 2:
@@ -124,7 +91,6 @@ def isqrt_exact(n):
 
 
 def rat_sqrt_exact(r):
-    """Exact square root of a non-negative Rat, or None if irrational."""
     if r.num < 0:
         return None
     a = isqrt_exact(r.num)
@@ -135,7 +101,6 @@ def rat_sqrt_exact(r):
 
 
 def my_sqrt(x):
-    """Float square root by Newton's method (Babylonian). x >= 0."""
     if x < 0:
         raise ValueError("sqrt of a negative number")
     if x == 0:
@@ -148,10 +113,6 @@ def my_sqrt(x):
         guess = better
     return guess
 
-
-# ---------------------------------------------------------------------------
-# Number formatting
-# ---------------------------------------------------------------------------
 
 def fmt_decimal(value, places=6):
     s = f"{value:.{places}f}"
@@ -191,10 +152,6 @@ def fmt_imaginary(r):
         return f"{r.num}i"
     return f"{r.num}i/{r.den}"
 
-
-# ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
 
 TERM_RE = re.compile(
     r"""^
@@ -247,10 +204,6 @@ def parse_equation(text):
     return parse_side(left), parse_side(right)
 
 
-# ---------------------------------------------------------------------------
-# Reduction and display
-# ---------------------------------------------------------------------------
-
 def reduce_equation(left, right):
     reduced = {}
     for exp in set(left) | set(right):
@@ -264,9 +217,6 @@ def degree_of(reduced):
 
 
 def print_reduced_form(reduced):
-    # keep zero terms only up to the highest non-null exponent (the subject's
-    # own examples keep a "0 * X^2" wedged between real terms, but nothing
-    # should trail after the last non-null one)
     top = max((e for e, c in reduced.items() if not c.is_zero()), default=None)
     parts = []
     for exp in sorted(reduced):
@@ -285,17 +235,11 @@ def print_reduced_form(reduced):
     print(f"Reduced form: {' '.join(parts)} = 0")
 
 
-# ---------------------------------------------------------------------------
-# Solving
-# ---------------------------------------------------------------------------
-
 def solve_degree_one(a, b, verbose, want_fraction=False):
     if verbose:
         print(f"Steps: X = -b / a = -({fmt_rat(b)}) / ({fmt_rat(a)})")
     print("The solution is:")
     x = -b / a
-    # mandatory part shows a decimal here (subject's own example: -0.25,
-    # not -1/4); the fraction form is the bonus, only with --fraction
     print(fmt_solution(x) if want_fraction else fmt_decimal(x.to_float()))
 
 
@@ -308,8 +252,6 @@ def solve_degree_two(a, b, c, verbose, want_fraction=False):
               f"({fmt_rat(a)}) * ({fmt_rat(c)}) = {fmt_rat(delta)}")
 
     def show_real(x):
-        # mandatory part prints a decimal for real roots (subject never
-        # shows a real root as a fraction); --fraction is the bonus
         return fmt_solution(x) if want_fraction else fmt_decimal(x.to_float())
 
     if delta.is_zero():
@@ -344,11 +286,6 @@ def solve_degree_two(a, b, c, verbose, want_fraction=False):
         real_s, imag_s = fmt_decimal(real.to_float()), fmt_decimal(imag_f) + "i"
     print(f"{real_s} + {imag_s}")
     print(f"{real_s} - {imag_s}")
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def run(equation, verbose=False, want_fraction=False):
     left, right = parse_equation(equation)
